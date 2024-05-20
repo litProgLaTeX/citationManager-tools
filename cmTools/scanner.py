@@ -25,7 +25,7 @@ from pybtex.database import \
   BibliographyData, Entry, Person
 from pybtex.plugin import find_plugin
 
-from citationManager.biblatexTools import \
+from cmTools.biblatexTools import \
   citationPathExists, loadCitation, \
   citation2urlBase, citation2refUrl
 

@@ -29,6 +29,14 @@ from cmTools.biblatexTools import \
   citationPathExists, loadCitation, \
   citation2urlBase, citation2refUrl
 
+peopleBiblatexFields = [
+  'author', 'editor'
+]
+
+privateBiblatexFields = [
+  'docType', 'creationid', 'citePath', 'docPath', 'ignoreUrl'
+]
+
 def normalizeBiblatex(biblatex) :
   if 'year' in biblatex :
     biblatex['year'] = str(biblatex['year'])
@@ -40,6 +48,20 @@ def normalizeBiblatex(biblatex) :
     if isinstance(biblatex[aKey], datetime.date) :
       #print("OOPS!", aCiteId, aKey, biblatex[aKey], str(biblatex[aKey]))
       biblatex[aKey] = biblatex[aKey].strftime("%Y-%m-%d")
+
+  fields2delete = set()
+  for aPrivateField in privateBiblatexFields :
+    if aPrivateField in biblatex :
+      fields2delete.add(aPrivateField)
+  for aField, aValue in biblatex.items() :
+    if isinstance(aValue, list) :
+      if aField in peopleBiblatexFields : continue
+      fields2delete.add(aField)
+    elif isinstance(aValue, int) :
+      biblatex[aField] = str(aValue)
+  for aField in fields2delete :
+    del biblatex[aField]
+
   return biblatex
 
 def usage() :
@@ -105,6 +127,7 @@ def loadConfig(verbose=False) :
   config['auxFile']  = baseFileName+'.aux'
   config['bblFile']  = baseFileName+'.bbl'
   config['citeFile'] = baseFileName+'.cit'
+  config['bibFile']  = baseFileName+'.bib'
 
   if verbose :
     print("-------------------------------------------------")
@@ -282,3 +305,15 @@ def cli() :
       'knownCitations'   : knownCitations,
       'missingCitations' : sorted(list(missingCitations))
     }))
+
+  # write out a "synthetized" .bib file
+  print("Writing out the BIB file")
+  with open(config['bibFile'], 'w') as bibFile :
+    for aKey, aCiteData in bibData.entries.items() :
+      print(f"  writing out: {aKey}")
+      for aPersonRole in peopleBiblatexFields :
+        if aPersonRole in aCiteData.fields :
+          del aCiteData.fields[aPersonRole]
+      #print(yaml.dump(aCiteData))
+      bibFile.write(aCiteData.to_string("bibtex"))
+      bibFile.write("\n")

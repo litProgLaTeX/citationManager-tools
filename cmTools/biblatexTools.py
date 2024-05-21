@@ -10,7 +10,7 @@ import yaml
 
 def getBibLatexTypes() :
   return importlib.resources.files(
-    "citationManager.resources"
+    "cmTools.resources"
   ).joinpath(
     "biblatexTypes.yaml"
   ).open(
@@ -51,8 +51,15 @@ def author2urlBase(authorName) :
   authorFileName = removeMultipleDashes.sub('-', authorFileName)
   authorFileName = removeLeadingDashes.sub('', authorFileName)
   authorFileName = removeTrailingDashes.sub('', authorFileName)
-  #print(f"author/{authorFileName[0:2]}/{authorFileName}")
   return f"author/{authorFileName[0:2]}/{authorFileName}"
+
+def guessSurname(aPerson) :
+  surname = None
+  if ',' in aPerson :
+    surname = aPerson.split(',')[0]
+  else :
+    surname = aPerson.split()[-1]
+  return surname
 
 def expandSurname(surname) :
   surnameParts = surname.split()
@@ -64,7 +71,7 @@ def expandSurname(surname) :
     if 0 < len(surnameParts) : jrPart  = surnameParts.pop(0)
   return (surname, vonPart, jrPart)
 
-def getPossiblePeopleFromSurname(surname) : 
+def getPossiblePeopleFromSurname(surname) :
   surname, vonPart, jrPart = expandSurname(surname)
   print(f"Searching for author: [{surname}] ({vonPart}) ({jrPart})")
   authorDir = Path('author')
@@ -101,22 +108,31 @@ def normalizeAuthor(anAuthorRole) :
     'url'       : []
   }
 
-  nameParts = anAuthor.split(',')
-  if nameParts :
-    surname = nameParts[0].strip()
-    surname, vonPart, jrPart = expandSurname(surname)
-    firstname = ""
-    if 1 < len(nameParts) :
-      firstname = nameParts[1].replace('.', ' ').strip()
-    cleanName = f" {vonPart} {surname} {jrPart}, {firstname}"
-    cleanName = removeMultipleSpaces.sub(" ", cleanName)
-    cleanName = removeSpacesBeforeComma.sub(",", cleanName)
-    cleanName = cleanName.strip()
-    authorDict['cleanname'] = cleanName
-    authorDict['surname']   = surname
-    authorDict['firstname'] = firstname
-    authorDict['von']       = vonPart
-    authorDict['jr']        = jrPart
+  # Guess the parts of an author
+  if ',' in anAuthor :
+    nameParts = anAuthor.split(',')
+    if nameParts :
+      surname = nameParts[0].strip()
+      surname, vonPart, jrPart = expandSurname(surname)
+      firstname = ""
+      if 1 < len(nameParts) :
+        firstname = nameParts[1].replace('.', ' ').strip()
+  else :
+    surname = guessSurname(anAuthor)
+    firstname = anAuthor.replace(surname, '').strip()
+    vonPart = ''
+    jrPart = ''
+
+  cleanName = f" {vonPart} {surname} {jrPart}, {firstname}"
+  cleanName = removeMultipleSpaces.sub(" ", cleanName)
+  cleanName = removeSpacesBeforeComma.sub(",", cleanName)
+  cleanName = cleanName.strip()
+  authorDict['cleanname'] = cleanName
+  authorDict['surname']   = surname
+  authorDict['firstname'] = firstname
+  authorDict['von']       = vonPart
+  authorDict['jr']        = jrPart
+
   return authorDict
 
 def authorPathExists(anAuthorDict) :
@@ -125,7 +141,7 @@ def authorPathExists(anAuthorDict) :
 def savedAuthorToFile(anAuthorDict, theNotes) :
   if not isinstance(anAuthorDict, dict) : return False
   if 'cleanname' not in anAuthorDict    : return False
-  
+
   authorPath = Path(author2urlBase(anAuthorDict['cleanname']) + '.md')
 
   if not authorPath.exists() :
@@ -212,9 +228,9 @@ def normalizeBiblatex(risEntry) :
     aPerson, aRole = getPersonRole(aPersonRole)
     if aRole != 'author' : continue
     print(f"CiteID author: {aPerson}")
-    surname = aPerson.split(',')
+    surname = guessSurname(aPerson)
     if surname :
-      citeId = citeId+surname[0]
+      citeId = citeId+surname
   citeId = citeId.replace(' ', '')
   if 'year' in risEntry :
     citeId = citeId+str(risEntry['year'])
@@ -229,7 +245,7 @@ def normalizeBiblatex(risEntry) :
       biblatexEntry['url'] = [ biblatexEntry['url'] ]
   else :
     biblatexEntry['url'] = []
-  
+
   return (peopleRoles, biblatexEntry, citeId)
 
 def citationPathExists(aCiteId, refsDir=None) :
@@ -299,7 +315,7 @@ biblatex:
         thePeople[aRole] = []
       thePeople[aRole].append(aPerson)
     for aRole, someNames in thePeople.items() :
-      if aRole in aCitationDict : 
+      if aRole in aCitationDict :
         del aCitationDict[aRole]
       citeFile.write(f"  {aRole}: \n")
       for aName in someNames :
@@ -323,19 +339,18 @@ biblatex:
       citeFile.write("\n")
 
   return True
-  
+
 def loadCitation(aCiteId, refsDir=None) :
   headerDict   = {}
   bodyMarkdown = ""
 
-  #print(f"loading: {aCiteId}")
   citePath = Path(citation2urlBase(aCiteId) + '.md')
   if refsDir :
     citePath = Path(refsDir) / citePath
   citePath = citePath.expanduser()
   if not citePath.exists() :
     return (headerDict, bodyMarkdown)
-  
+
   with open(citePath) as citeFile :
     preHeader, headerYaml, bodyMarkdown = \
       citeFile.read().split('---\n')
